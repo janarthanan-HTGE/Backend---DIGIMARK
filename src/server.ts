@@ -7,8 +7,20 @@ import routes from './routes';
 
 export const app = express();
 
+const allowedOrigins = new Set([
+  'https://clientdigimark.vercel.app',
+  'http://localhost:5173',
+  'http://localhost:5174',
+]);
+
 app.use(cors({
-  origin: true,
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.has(origin)) {
+      callback(null, true);
+      return;
+    }
+    callback(new Error('Origin is not allowed by CORS.'));
+  },
   credentials: false,
   methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],

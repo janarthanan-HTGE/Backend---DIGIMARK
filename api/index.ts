@@ -3,6 +3,11 @@ import { app } from '../src/server';
 import { connectDatabase } from '../src/config/database';
 
 export default async function handler(req: Request, res: Response): Promise<void> {
+	if (req.method === 'OPTIONS') {
+		app(req, res);
+		return;
+	}
+
 	try {
 		await connectDatabase();
 		app(req, res);
