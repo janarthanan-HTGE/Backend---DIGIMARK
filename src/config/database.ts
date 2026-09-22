@@ -7,6 +7,8 @@ export async function connectDatabase(): Promise<void> {
     throw new Error('MONGODB_URI is required. Copy .env.example to .env and configure MongoDB.');
   }
 
+  if (mongoose.connection.readyState === 1 || mongoose.connection.readyState === 2) return;
+
   mongoose.set('strictQuery', true);
   await mongoose.connect(uri, { serverSelectionTimeoutMS: 10_000 });
   console.log(`Connected to MongoDB (${mongoose.connection.name})`);
