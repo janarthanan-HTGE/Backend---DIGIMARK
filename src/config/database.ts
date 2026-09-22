@@ -4,7 +4,7 @@ export async function connectDatabase(): Promise<void> {
   const uri = process.env.MONGODB_URI;
 
   if (!uri) {
-    throw new Error('MONGODB_URI is required. Copy .env.example to .env and configure MongoDB.');
+    throw new Error('MONGODB_URI is required.');
   }
 
   if (mongoose.connection.readyState === 1 || mongoose.connection.readyState === 2) return;

@@ -16,7 +16,11 @@ interface TokenPayload extends jwt.JwtPayload {
 }
 
 function jwtSecret(): string {
-  return process.env.JWT_SECRET || 'development-only-change-this-secret';
+  const secret = process.env.JWT_SECRET?.trim();
+  if (!secret) {
+    throw new Error('JWT_SECRET is required.');
+  }
+  return secret;
 }
 
 export function signAccessToken(userId: string, role: UserRole): string {

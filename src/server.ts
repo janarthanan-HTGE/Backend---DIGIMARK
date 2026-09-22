@@ -4,18 +4,15 @@ import express from 'express';
 import { connectDatabase, disconnectDatabase } from './config/database';
 import { errorHandler, notFound } from './middleware/errors';
 import routes from './routes';
-import { ensureDevelopmentAdmin } from './services/bootstrap';
 
 export const app = express();
 
-const configuredOrigins = process.env.CORS_ORIGINS?.split(',').map((origin) => origin.trim()).filter(Boolean) || [];
-const allowAllOrigins = configuredOrigins.length === 0 && process.env.NODE_ENV !== 'production';
 app.use(cors({
-  origin(origin, callback) {
-    if (!origin || allowAllOrigins || configuredOrigins.includes(origin)) return callback(null, true);
-    return callback(new Error('Origin is not allowed by CORS.'));
-  },
-  credentials: true,
+  origin: true,
+  credentials: false,
+  methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  optionsSuccessStatus: 204,
 }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -25,9 +22,7 @@ app.use(errorHandler);
 
 export async function startServer(): Promise<void> {
   await connectDatabase();
-  await ensureDevelopmentAdmin();
-  const port = Number(process.env.PORT || 3000);
-  app.listen(port, () => console.log(`HTGE API listening on http://localhost:${port}/api`));
+  app.listen(3000, () => console.log('HTGE API listening on http://localhost:3000/api'));
 }
 
 if (require.main === module) {
