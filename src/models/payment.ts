@@ -35,4 +35,7 @@ const paymentSchema = new Schema<PaymentShape, PaymentModel>(
   { timestamps: true, versionKey: false },
 );
 
+paymentSchema.index({ project: 1, createdAt: -1 });
+paymentSchema.index({ project: 1, type: 1, status: 1, createdAt: -1 });
+
 export const Payment = model<PaymentShape, PaymentModel>('Payment', paymentSchema);

@@ -58,5 +58,7 @@ const projectSchema = new Schema<ProjectShape, ProjectModel>(
 );
 
 projectSchema.index({ client: 1, status: 1, createdAt: -1 });
+projectSchema.index({ client: 1, createdAt: -1 });
+projectSchema.index({ freelancers: 1, createdAt: -1 });
 
 export const Project = model<ProjectShape, ProjectModel>('Project', projectSchema);

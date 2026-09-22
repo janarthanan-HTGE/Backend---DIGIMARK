@@ -56,18 +56,59 @@ function formatFreelancer(user: UserShape & { _id?: unknown }, metrics: Freelanc
   };
 }
 
+async function projectMetricsByClient(): Promise<Map<string, CompanyMetrics>> {
+  const rows = await Project.aggregate<{ _id: { client: unknown; status: string }; count: number }>([
+    { $group: { _id: { client: '$client', status: '$status' }, count: { $sum: 1 } } },
+  ]);
+  const metrics = new Map<string, CompanyMetrics>();
+  for (const row of rows) {
+    const clientId = entityId(row._id.client);
+    const current = metrics.get(clientId) || { total: 0, ongoing: 0, completed: 0 };
+    current.total += row.count;
+    if (row._id.status === 'ONGOING') current.ongoing = row.count;
+    if (row._id.status === 'COMPLETED') current.completed = row.count;
+    metrics.set(clientId, current);
+  }
+  return metrics;
+}
+
+async function projectMetricsByFreelancer(): Promise<Map<string, FreelancerMetrics>> {
+  const rows = await Project.aggregate<{ _id: { freelancer: unknown; status: string }; count: number }>([
+    { $unwind: '$freelancers' },
+    { $group: { _id: { freelancer: '$freelancers', status: '$status' }, count: { $sum: 1 } } },
+  ]);
+  const metrics = new Map<string, FreelancerMetrics>();
+  for (const row of rows) {
+    const freelancerId = entityId(row._id.freelancer);
+    const current = metrics.get(freelancerId) || { total: 0, active: 0 };
+    current.total += row.count;
+    if (row._id.status === 'ONGOING') current.active += row.count;
+    metrics.set(freelancerId, current);
+  }
+  return metrics;
+}
+
 async function companyMetrics(clientId: string): Promise<CompanyMetrics> {
   const rows = await Project.aggregate<{ _id: string; count: number }>([
     { $match: { client: ensureObjectId(clientId, 'Client ID') } },
     { $group: { _id: '$status', count: { $sum: 1 } } },
   ]);
-  const total = rows.reduce((sum, row) => sum + row.count, 0);
-  return { total, ongoing: rows.find((row) => row._id === 'ONGOING')?.count || 0, completed: rows.find((row) => row._id === 'COMPLETED')?.count || 0 };
+  return rows.reduce<CompanyMetrics>((result, row) => ({
+    total: result.total + row.count,
+    ongoing: result.ongoing + (row._id === 'ONGOING' ? row.count : 0),
+    completed: result.completed + (row._id === 'COMPLETED' ? row.count : 0),
+  }), { total: 0, ongoing: 0, completed: 0 });
 }
 
 async function freelancerMetrics(freelancerId: string): Promise<FreelancerMetrics> {
-  const projects = await Project.find({ freelancers: ensureObjectId(freelancerId, 'Freelancer ID') }).select('status');
-  return { total: projects.length, active: projects.filter((project) => project.status === 'ONGOING').length };
+  const rows = await Project.aggregate<{ _id: string; count: number }>([
+    { $match: { freelancers: ensureObjectId(freelancerId, 'Freelancer ID') } },
+    { $group: { _id: '$status', count: { $sum: 1 } } },
+  ]);
+  return rows.reduce<FreelancerMetrics>((result, row) => ({
+    total: result.total + row.count,
+    active: result.active + (row._id === 'ONGOING' ? row.count : 0),
+  }), { total: 0, active: 0 });
 }
 
 export async function dashboardStats(_req: AuthenticatedRequest, res: Response): Promise<void> {
@@ -100,15 +141,27 @@ export async function dashboardStats(_req: AuthenticatedRequest, res: Response):
 }
 
 export async function listCompanies(_req: AuthenticatedRequest, res: Response): Promise<void> {
-  const companies = await User.find({ role: 'CLIENT' }).sort({ createdAt: -1 });
-  const formatted = await Promise.all(companies.map(async (company) => formatCompany(company.toObject(), await companyMetrics(company.id))));
+  const [companies, metrics] = await Promise.all([
+    User.find({ role: 'CLIENT' }).sort({ createdAt: -1 }),
+    projectMetricsByClient(),
+  ]);
+  const formatted = companies.map((company) => formatCompany(company.toObject(), metrics.get(company.id)));
   res.json({ success: true, data: formatted });
 }
 
 export async function getCompany(req: AuthenticatedRequest, res: Response): Promise<void> {
   const company = await User.findOne({ _id: ensureObjectId(req.params.id), role: 'CLIENT' });
   if (!company) throw new HttpError(404, 'Company not found.');
-  res.json({ success: true, data: formatCompany(company.toObject(), await companyMetrics(company.id)) });
+  const projects = await Project.aggregate<{ _id: string; count: number }>([
+    { $match: { client: company._id } },
+    { $group: { _id: '$status', count: { $sum: 1 } } },
+  ]);
+  const metrics = projects.reduce<CompanyMetrics>((result, row) => ({
+    total: result.total + row.count,
+    ongoing: result.ongoing + (row._id === 'ONGOING' ? row.count : 0),
+    completed: result.completed + (row._id === 'COMPLETED' ? row.count : 0),
+  }), { total: 0, ongoing: 0, completed: 0 });
+  res.json({ success: true, data: formatCompany(company.toObject(), metrics) });
 }
 
 export async function createCompany(req: AuthenticatedRequest, res: Response): Promise<void> {
@@ -163,8 +216,11 @@ export async function deleteCompany(req: AuthenticatedRequest, res: Response): P
 }
 
 export async function listFreelancers(_req: AuthenticatedRequest, res: Response): Promise<void> {
-  const freelancers = await User.find({ role: 'FREELANCER' }).sort({ createdAt: -1 });
-  const formatted = await Promise.all(freelancers.map(async (freelancer) => formatFreelancer(freelancer.toObject(), await freelancerMetrics(freelancer.id))));
+  const [freelancers, metrics] = await Promise.all([
+    User.find({ role: 'FREELANCER' }).sort({ createdAt: -1 }),
+    projectMetricsByFreelancer(),
+  ]);
+  const formatted = freelancers.map((freelancer) => formatFreelancer(freelancer.toObject(), metrics.get(freelancer.id)));
   res.json({ success: true, data: formatted });
 }
 
@@ -172,7 +228,15 @@ export async function getFreelancer(req: AuthenticatedRequest, res: Response): P
   const freelancer = await User.findOne({ _id: ensureObjectId(req.params.id), role: 'FREELANCER' });
   if (!freelancer) throw new HttpError(404, 'Freelancer not found.');
   const projects = await Project.find({ freelancers: freelancer._id }).sort({ createdAt: -1 }).populate('client', 'fullName email phone profile role').populate('freelancers', 'fullName email phone profile role');
-  res.json({ success: true, data: { ...formatFreelancer(freelancer.toObject(), await freelancerMetrics(freelancer.id)), projects: projects.map((project) => formatProject(project)) } });
+  const metrics = await Project.aggregate<{ _id: string; count: number }>([
+    { $match: { freelancers: freelancer._id } },
+    { $group: { _id: '$status', count: { $sum: 1 } } },
+  ]);
+  const freelancerMetrics = metrics.reduce<FreelancerMetrics>((result, row) => ({
+    total: result.total + row.count,
+    active: result.active + (row._id === 'ONGOING' ? row.count : 0),
+  }), { total: 0, active: 0 });
+  res.json({ success: true, data: { ...formatFreelancer(freelancer.toObject(), freelancerMetrics), projects: projects.map((project) => formatProject(project)) } });
 }
 
 function readSkills(value: unknown): string[] {

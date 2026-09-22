@@ -5,7 +5,7 @@ import { Payment } from '../models/payment';
 import { Project } from '../models/project';
 import { User } from '../models/user';
 import { HttpError } from '../utils/errors';
-import { formatUser } from '../utils/serializers';
+import { entityId, formatUser } from '../utils/serializers';
 import { ensureEmail, ensureString } from '../utils/validation';
 
 export async function getProfile(req: AuthenticatedRequest, res: Response): Promise<void> {
@@ -53,6 +53,17 @@ export async function getAllUsers(_req: AuthenticatedRequest, res: Response): Pr
 
 export async function clientNotifications(req: AuthenticatedRequest, res: Response): Promise<void> {
   const projects = await Project.find({ client: req.auth?.userId }).sort({ updatedAt: -1 });
+  const droppedProjectIds = projects
+    .filter((project) => project.status === 'DROPPED')
+    .map((project) => project._id);
+  const refunds = droppedProjectIds.length
+    ? await Payment.find({
+      project: { $in: droppedProjectIds },
+      type: 'REFUND',
+      status: 'REFUNDED',
+    }).select('project amount')
+    : [];
+  const refundsByProject = new Map(refunds.map((refund) => [entityId(refund.project), refund.amount]));
   const notifications: Array<Record<string, unknown>> = [];
 
   for (const project of projects) {
@@ -70,8 +81,8 @@ export async function clientNotifications(req: AuthenticatedRequest, res: Respon
       notifications.push({ ...base, id: `drop-request-${project.id}`, title: 'Drop request pending', description: `Your request to drop "${project.title}" is awaiting review.`, type: 'alert' });
     }
     if (project.status === 'DROPPED') {
-      const refund = await Payment.findOne({ project: project._id, type: 'REFUND', status: 'REFUNDED' });
-      const suffix = refund ? ` A refund of ₹${refund.amount.toLocaleString('en-IN')} was issued.` : '';
+      const refundAmount = refundsByProject.get(project.id);
+      const suffix = refundAmount !== undefined ? ` A refund of ₹${refundAmount.toLocaleString('en-IN')} was issued.` : '';
       notifications.push({ ...base, id: `dropped-${project.id}`, title: 'Project dropped', description: `"${project.title}" was dropped.${suffix}`, type: 'drop' });
     }
   }
