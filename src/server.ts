@@ -9,9 +9,10 @@ import { ensureDevelopmentAdmin } from './services/bootstrap';
 export const app = express();
 
 const configuredOrigins = process.env.CORS_ORIGINS?.split(',').map((origin) => origin.trim()).filter(Boolean) || [];
+const allowAllOrigins = configuredOrigins.length === 0 && process.env.NODE_ENV !== 'production';
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || configuredOrigins.length === 0 || configuredOrigins.includes(origin)) return callback(null, true);
+    if (!origin || allowAllOrigins || configuredOrigins.includes(origin)) return callback(null, true);
     return callback(new Error('Origin is not allowed by CORS.'));
   },
   credentials: true,
