@@ -7,8 +7,7 @@
     "dev": "nodemon --watch src --ext ts --exec ts-node src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "type-check": "tsc --noEmit",
-    "seed": "ts-node src/seed.ts"
+    "type-check": "tsc --noEmit"
   },
   "keywords": [
     "htge",
