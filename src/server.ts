@@ -7,27 +7,8 @@ import routes from './routes';
 
 export const app = express();
 
-const configuredOrigins = (process.env.CLIENT_ORIGINS || '')
-  .split(',')
-  .map((origin) => origin.trim().replace(/\/$/, ''))
-  .filter(Boolean);
-
-const allowedOrigins = new Set([
-  'https://clientdigimark.vercel.app',
-  'https://admindigimark.vercel.app',
-  'http://clientdigimark.vercel.app',
-  'http://admindigimark.vercel.app',
-  ...configuredOrigins,
-]);
-
 app.use(cors({
-  origin(origin, callback) {
-    if (!origin || allowedOrigins.has(origin.replace(/\/$/, ''))) {
-      callback(null, true);
-      return;
-    }
-    callback(new Error('Origin is not allowed by CORS.'));
-  },
+  origin: true, // reflects any request origin — effectively allows all
   credentials: false,
   methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
