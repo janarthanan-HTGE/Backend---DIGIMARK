@@ -53,7 +53,16 @@ export async function createOrder(req: AuthenticatedRequest, res: Response): Pro
     notes: { projectId: project.id, paymentType: type },
   });
   await Payment.create({ project: project._id, user: project.client, amount, type, status: 'PENDING', razorpayOrderId: order.id });
-  res.json({ success: true, data: { orderId: order.id, amount: order.amount, currency: order.currency, paymentType: type } });
+  res.json({
+    success: true,
+    data: {
+      orderId: order.id,
+      amount: order.amount,
+      currency: order.currency,
+      paymentType: type,
+      keyId: process.env.RAZORPAY_KEY_ID,
+    },
+  });
 }
 
 export async function verifyPayment(req: AuthenticatedRequest, res: Response): Promise<void> {
